@@ -160,6 +160,34 @@ M-x chatgpt-shell-swap-model RET
 
 All HuggingFace models will appear in the list alongside OpenAI, Anthropic, etc.
 
+### Verifying Which Model Is Active 🔍
+
+**Quick check - run this command:**
+```
+M-x chatgpt-shell-huggingface-current-model
+```
+
+This shows you:
+- Current model ID (e.g., `meta-llama/Meta-Llama-3-8B-Instruct`)
+- Provider (confirms it's HuggingFace, not OpenAI/Anthropic)
+- API endpoint being used
+- Model specifications (context window, max tokens, etc.)
+
+**When you launch a HuggingFace shell, you'll see:**
+```
+[Using HuggingFace model: meta-llama/Meta-Llama-3-8B-Instruct]
+[API: https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct]
+
+ChatGPT>
+```
+
+**Other verification commands:**
+- `M-x chatgpt-shell-huggingface-verify-api` - Test API connection
+- `M-x chatgpt-shell-huggingface-list-models` - List all HF models (shows active with ▸)
+- `M-: chatgpt-shell-model-version` - Check current model variable
+
+📖 **[Complete verification guide →](VERIFICATION.md)**
+
 ### Adding Custom Models
 
 Add any HuggingFace model dynamically:

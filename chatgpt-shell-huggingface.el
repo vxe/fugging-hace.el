@@ -362,7 +362,143 @@ This is called from huggingface-browser when selecting a model."
   ;; Set as active model
   (when (fboundp 'chatgpt-shell)
     (setq chatgpt-shell-model-version model-id)
-    (chatgpt-shell)))
+    (let ((buffer (chatgpt-shell)))
+      ;; Show confirmation message
+      (message "🤗 HuggingFace shell started with model: %s" model-id)
+      ;; Add a welcome message to the buffer
+      (with-current-buffer buffer
+        (goto-char (point-max))
+        (let ((inhibit-read-only t))
+          (insert (propertize
+                   (format "\n[Using HuggingFace model: %s]\n" model-id)
+                   'face 'font-lock-comment-face))
+          (insert (propertize
+                   (format "[API: %s/models/%s]\n\n"
+                           chatgpt-shell-huggingface-api-url-base
+                           model-id)
+                   'face 'font-lock-comment-face))))
+      buffer)))
+
+;;; Verification and Debugging Commands
+
+(defun chatgpt-shell-huggingface-current-model ()
+  "Show information about the currently active HuggingFace model."
+  (interactive)
+  (if (and (boundp 'chatgpt-shell-model-version)
+           chatgpt-shell-model-version)
+      (let* ((model-id chatgpt-shell-model-version)
+             (model (seq-find (lambda (m)
+                                (string= (map-elt m :version) model-id))
+                              chatgpt-shell-models))
+             (provider (when model (map-elt model :provider))))
+        (if (string= provider "HuggingFace")
+            (progn
+              (message "Current model: %s (HuggingFace)\nAPI URL: %s/models/%s"
+                       model-id
+                       chatgpt-shell-huggingface-api-url-base
+                       model-id)
+              ;; Show detailed info in a popup
+              (with-current-buffer (get-buffer-create "*HuggingFace Model Info*")
+                (let ((inhibit-read-only t))
+                  (erase-buffer)
+                  (insert (propertize "🤗 HuggingFace Model Information\n" 'face 'bold))
+                  (insert (make-string 50 ?=) "\n\n")
+                  (insert (propertize "Model ID: " 'face 'bold) model-id "\n")
+                  (insert (propertize "Provider: " 'face 'bold) "HuggingFace\n")
+                  (insert (propertize "Short Name: " 'face 'bold)
+                          (or (map-elt model :short-version) model-id) "\n")
+                  (insert (propertize "API Endpoint: " 'face 'bold)
+                          (format "%s/models/%s\n"
+                                  chatgpt-shell-huggingface-api-url-base
+                                  model-id))
+                  (insert (propertize "Context Window: " 'face 'bold)
+                          (format "%s tokens\n" (map-elt model :context-window)))
+                  (insert (propertize "Max Output: " 'face 'bold)
+                          (format "%s tokens\n" (map-elt model :max-new-tokens)))
+                  (insert (propertize "Token Width: " 'face 'bold)
+                          (format "~%s chars/token\n" (map-elt model :token-width)))
+                  (when-let ((desc (map-elt model :description)))
+                    (insert "\n" (propertize "Description:\n" 'face 'bold))
+                    (insert desc "\n"))
+                  (insert "\n" (propertize "Press 'q' to close.\n" 'face 'italic))
+                  (goto-char (point-min)))
+                (view-mode))
+              (pop-to-buffer "*HuggingFace Model Info*"))
+          (message "Current model is NOT a HuggingFace model: %s (%s)"
+                   model-id provider)))
+    (message "No model currently active")))
+
+(defun chatgpt-shell-huggingface-verify-api ()
+  "Verify that the HuggingFace API is accessible and token is valid."
+  (interactive)
+  (message "Testing HuggingFace API connection...")
+  (let ((url-request-extra-headers
+         `(("Authorization" . ,(concat "Bearer " (chatgpt-shell-huggingface--get-key))))))
+    (url-retrieve
+     "https://huggingface.co/api/whoami-v2"
+     (lambda (status)
+       (if (plist-get status :error)
+           (message "❌ API Error: %s\nCheck your token in chatgpt-shell-huggingface-key"
+                    (plist-get status :error))
+         (goto-char (point-min))
+         (re-search-forward "^$")
+         (let* ((json-object-type 'plist)
+                (json-array-type 'list)
+                (json-key-type 'keyword)
+                (data (json-read))
+                (username (plist-get data :name))
+                (auth-type (plist-get data :type)))
+           (message "✅ HuggingFace API is working!\nAuthenticated as: %s (%s)"
+                    username auth-type)
+           (kill-buffer)))))))
+
+(defun chatgpt-shell-huggingface-list-models ()
+  "List all available HuggingFace models in chatgpt-shell."
+  (interactive)
+  (let ((hf-models (seq-filter
+                    (lambda (m)
+                      (string= (map-elt m :provider) "HuggingFace"))
+                    chatgpt-shell-models)))
+    (if hf-models
+        (with-current-buffer (get-buffer-create "*HuggingFace Models*")
+          (let ((inhibit-read-only t))
+            (erase-buffer)
+            (insert (propertize "🤗 Available HuggingFace Models\n" 'face 'bold))
+            (insert (make-string 50 ?=) "\n\n")
+            (insert (format "Total: %d models\n\n" (length hf-models)))
+            (dolist (model hf-models)
+              (let ((id (map-elt model :version))
+                    (short (map-elt model :short-version))
+                    (desc (map-elt model :description))
+                    (active (and (boundp 'chatgpt-shell-model-version)
+                                 (string= chatgpt-shell-model-version
+                                          (map-elt model :version)))))
+                (insert (propertize
+                         (if active "▸ " "  ")
+                         'face (if active 'success 'default)))
+                (insert (propertize short 'face 'font-lock-function-name-face))
+                (insert "\n  " id "\n")
+                (when desc
+                  (insert "  " (propertize desc 'face 'font-lock-comment-face) "\n"))
+                (insert "\n")))
+            (insert (propertize "\n▸ = currently active\n" 'face 'italic))
+            (insert (propertize "Press 'q' to close.\n" 'face 'italic))
+            (goto-char (point-min)))
+          (view-mode)
+          (pop-to-buffer (current-buffer)))
+      (message "No HuggingFace models available. Run M-x huggingface-browser to add some."))))
+
+(defun chatgpt-shell-huggingface-show-request-log ()
+  "Show the last request sent to HuggingFace API (requires chatgpt-shell-logging)."
+  (interactive)
+  (if (and (boundp 'chatgpt-shell-logging)
+           chatgpt-shell-logging)
+      (if (get-buffer "*chatgpt-log*")
+          (progn
+            (pop-to-buffer "*chatgpt-log*")
+            (message "Showing API request log. Look for HuggingFace URLs."))
+        (message "No log buffer found. Make sure you've sent at least one request."))
+    (message "Enable logging first: (setq chatgpt-shell-logging t)")))
 
 (provide 'chatgpt-shell-huggingface)
 
