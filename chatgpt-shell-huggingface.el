@@ -339,15 +339,18 @@ This is a simplified version for dynamically selected models."
   "Add a HuggingFace MODEL-ID to chatgpt-shell's available models.
 Creates a model definition and adds it to `chatgpt-shell-models'."
   (interactive "sHuggingFace Model ID: ")
-  (when (fboundp 'chatgpt-shell-models)
+  (if (not (boundp 'chatgpt-shell-models))
+      (error "chatgpt-shell not loaded. Please (require 'chatgpt-shell) first")
     (let ((new-model (chatgpt-shell-huggingface--create-model-from-id model-id)))
       ;; Check if model already exists
-      (unless (seq-find (lambda (m)
-                          (string= (map-elt m :version) model-id))
-                        chatgpt-shell-models)
+      (if (seq-find (lambda (m)
+                      (string= (map-elt m :version) model-id))
+                    chatgpt-shell-models)
+          (message "HuggingFace model already available: %s" model-id)
         ;; Add to the list
-        (add-to-list 'chatgpt-shell-models new-model)
-        (message "Added HuggingFace model: %s" model-id)))))
+        (push new-model chatgpt-shell-models)
+        (message "Added HuggingFace model: %s" model-id)
+        new-model))))
 
 ;;; Integration with Browser
 
@@ -356,30 +359,128 @@ Creates a model definition and adds it to `chatgpt-shell-models'."
 This is called from huggingface-browser when selecting a model."
   (interactive "sModel ID: ")
 
-  ;; Ensure the model is available
-  (chatgpt-shell-huggingface-add-model model-id)
+  ;; Check if chatgpt-shell is available
+  (unless (fboundp 'chatgpt-shell)
+    (error "chatgpt-shell not available. Please install and load chatgpt-shell package"))
 
-  ;; Set as active model
-  (when (fboundp 'chatgpt-shell)
-    (setq chatgpt-shell-model-version model-id)
-    (let ((buffer (chatgpt-shell)))
-      ;; Show confirmation message
-      (message "🤗 HuggingFace shell started with model: %s" model-id)
-      ;; Add a welcome message to the buffer
-      (with-current-buffer buffer
-        (goto-char (point-max))
-        (let ((inhibit-read-only t))
-          (insert (propertize
-                   (format "\n[Using HuggingFace model: %s]\n" model-id)
-                   'face 'font-lock-comment-face))
-          (insert (propertize
-                   (format "[API: %s/models/%s]\n\n"
-                           chatgpt-shell-huggingface-api-url-base
-                           model-id)
-                   'face 'font-lock-comment-face))))
-      buffer)))
+  ;; Ensure the model is available
+  (let ((model (chatgpt-shell-huggingface-add-model model-id)))
+    (unless model
+      (error "Failed to add model: %s" model-id)))
+
+  ;; Set as active model and start shell
+  (setq chatgpt-shell-model-version model-id)
+  (message "Starting HuggingFace shell with: %s" model-id)
+
+  (let ((buffer (chatgpt-shell)))
+    ;; Show confirmation message
+    (message "🤗 HuggingFace shell started with model: %s" model-id)
+    ;; Add a welcome message to the buffer
+    (with-current-buffer buffer
+      (goto-char (point-max))
+      (let ((inhibit-read-only t))
+        (insert (propertize
+                 (format "\n[Using HuggingFace model: %s]\n" model-id)
+                 'face 'font-lock-comment-face))
+        (insert (propertize
+                 (format "[API: %s/models/%s]\n\n"
+                         chatgpt-shell-huggingface-api-url-base
+                         model-id)
+                 'face 'font-lock-comment-face))))
+    buffer))
 
 ;;; Verification and Debugging Commands
+
+(defun chatgpt-shell-huggingface-debug-model (model-id)
+  "Debug why MODEL-ID might not be working.
+Shows whether chatgpt-shell is loaded, if the model exists, and other diagnostics."
+  (interactive
+   (list (or (and (boundp 'chatgpt-shell-model-version)
+                  chatgpt-shell-model-version)
+             (read-string "Model ID to debug: "))))
+
+  (with-current-buffer (get-buffer-create "*HuggingFace Debug*")
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert (propertize "🔍 HuggingFace Model Debug Info\n" 'face 'bold))
+      (insert (make-string 50 ?=) "\n\n")
+
+      ;; Check chatgpt-shell
+      (insert (propertize "1. chatgpt-shell Status:\n" 'face 'bold))
+      (if (fboundp 'chatgpt-shell)
+          (insert "   ✅ chatgpt-shell function is available\n")
+        (insert "   ❌ chatgpt-shell function NOT found\n"
+                "   → Install chatgpt-shell: M-x package-install RET chatgpt-shell\n"))
+
+      (if (boundp 'chatgpt-shell-models)
+          (insert (format "   ✅ chatgpt-shell-models variable exists (%d models)\n"
+                          (length chatgpt-shell-models)))
+        (insert "   ❌ chatgpt-shell-models variable NOT found\n"
+                "   → Load chatgpt-shell: (require 'chatgpt-shell)\n"))
+
+      (insert "\n")
+
+      ;; Check model existence
+      (insert (propertize "2. Model Status:\n" 'face 'bold))
+      (insert (format "   Looking for: %s\n" model-id))
+
+      (if (not (boundp 'chatgpt-shell-models))
+          (insert "   ⊘ Cannot check - chatgpt-shell-models not loaded\n")
+        (let ((model (seq-find (lambda (m)
+                                 (string= (map-elt m :version) model-id))
+                               chatgpt-shell-models)))
+          (if model
+              (progn
+                (insert "   ✅ Model found in chatgpt-shell-models\n")
+                (insert (format "      Provider: %s\n" (map-elt model :provider)))
+                (insert (format "      Short name: %s\n" (map-elt model :short-version))))
+            (insert "   ❌ Model NOT found in chatgpt-shell-models\n")
+            (insert "   → Add it: (chatgpt-shell-huggingface-add-model \"" model-id "\")\n"))))
+
+      (insert "\n")
+
+      ;; Check current model setting
+      (insert (propertize "3. Current Settings:\n" 'face 'bold))
+      (if (boundp 'chatgpt-shell-model-version)
+          (insert (format "   chatgpt-shell-model-version: %s\n"
+                          chatgpt-shell-model-version))
+        (insert "   chatgpt-shell-model-version: NOT SET\n"))
+
+      (insert "\n")
+
+      ;; Check HuggingFace models
+      (insert (propertize "4. Available HuggingFace Models:\n" 'face 'bold))
+      (if (not (boundp 'chatgpt-shell-models))
+          (insert "   ⊘ Cannot check - chatgpt-shell-models not loaded\n")
+        (let ((hf-models (seq-filter
+                          (lambda (m)
+                            (string= (map-elt m :provider) "HuggingFace"))
+                          chatgpt-shell-models)))
+          (if hf-models
+              (progn
+                (insert (format "   Found %d HuggingFace models:\n" (length hf-models)))
+                (dolist (m hf-models)
+                  (insert (format "      - %s\n" (map-elt m :version)))))
+            (insert "   ⊘ No HuggingFace models loaded\n")
+            (insert "   → Load default models: (require 'chatgpt-shell-huggingface)\n"))))
+
+      (insert "\n")
+
+      ;; API key check
+      (insert (propertize "5. API Key Status:\n" 'face 'bold))
+      (condition-case err
+          (let ((key (chatgpt-shell-huggingface--get-key)))
+            (if (and key (> (length key) 0))
+                (insert (format "   ✅ API key is set (length: %d)\n" (length key)))
+              (insert "   ❌ API key is empty or nil\n")))
+        (error
+         (insert (format "   ❌ Error getting API key: %s\n" (error-message-string err)))))
+
+      (insert "\n")
+      (insert (propertize "Press 'q' to close.\n" 'face 'italic))
+      (goto-char (point-min)))
+    (view-mode)
+    (pop-to-buffer (current-buffer))))
 
 (defun chatgpt-shell-huggingface-current-model ()
   "Show information about the currently active HuggingFace model."
