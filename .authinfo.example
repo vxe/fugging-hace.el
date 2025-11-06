@@ -1,0 +1,27 @@
+# Example .authinfo file for HuggingFace Browser
+#
+# Copy this to ~/.authinfo (plain text) or ~/.authinfo.gpg (encrypted)
+#
+# Format: machine HOST login USERNAME password TOKEN
+#
+# For HuggingFace API:
+machine api-inference.huggingface.co login your-username password hf_YourActualTokenHere
+
+# Alternative format (if you prefer using the main hub):
+machine huggingface.co login your-username password hf_YourActualTokenHere
+
+# You can also add other services in the same file:
+# machine api.openai.com login apikey password sk-YourOpenAIKeyHere
+# machine api.anthropic.com login apikey password sk-ant-YourAnthropicKeyHere
+
+# Notes:
+# 1. The 'login' field can be anything (it's not used by the API)
+# 2. The 'password' field contains your actual HuggingFace token
+# 3. Your token should start with 'hf_'
+# 4. Get your token from: https://huggingface.co/settings/tokens
+#
+# Security recommendations:
+# - Use .authinfo.gpg (encrypted) instead of plain .authinfo
+# - Set file permissions: chmod 600 ~/.authinfo
+# - Never commit .authinfo to git
+# - Add to .gitignore if in a project directory

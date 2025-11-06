@@ -50,27 +50,53 @@ An interactive browser for HuggingFace models with seamless integration into `ch
    (require 'huggingface-browser)
    ```
 
-4. **Optional: Load chatgpt-shell integration**:
+4. **Set up your API token** (REQUIRED for chat):
+
+   **Recommended: Use .authinfo (secure)**
+
+   Create `~/.authinfo` or `~/.authinfo.gpg`:
+   ```
+   machine api-inference.huggingface.co login token password hf_your_token_here
+   ```
+
+   Then in your config:
    ```elisp
    ;; If you have chatgpt-shell installed
    (require 'chatgpt-shell)
    (require 'chatgpt-shell-huggingface)
 
-   ;; Set your HuggingFace API token
+   ;; Read API token from .authinfo (recommended)
+   (setq chatgpt-shell-huggingface-key
+         (lambda ()
+           (auth-source-pick-first-password
+            :host "api-inference.huggingface.co")))
+   ```
+
+   **Alternative: Direct string** (not recommended for security):
+   ```elisp
    (setq chatgpt-shell-huggingface-key "hf_your_token_here")
    ```
 
-### With use-package
+   📖 **See [AUTHINFO_SETUP.md](AUTHINFO_SETUP.md) for detailed setup guide**
+
+### With use-package (Recommended)
 
 ```elisp
 (use-package huggingface-browser
   :load-path "/path/to/fugging-hace.el"
   :custom
-  (huggingface-browser-api-key "hf_your_token_here")
+  ;; Read API key from .authinfo (secure)
+  (chatgpt-shell-huggingface-key
+   (lambda ()
+     (auth-source-pick-first-password
+      :host "api-inference.huggingface.co")))
+
+  ;; Use same key for browser
+  (huggingface-browser-api-key chatgpt-shell-huggingface-key)
+
   :config
   (when (require 'chatgpt-shell nil t)
-    (require 'chatgpt-shell-huggingface)
-    (setq chatgpt-shell-huggingface-key huggingface-browser-api-key)))
+    (require 'chatgpt-shell-huggingface)))
 ```
 
 ## Usage
@@ -151,19 +177,58 @@ Or programmatically:
 
 ## Configuration
 
-### API Token
+### API Token (Required for Chat)
 
-**Required for chat functionality**. Get your free token from https://huggingface.co/settings/tokens
+**Get your free token:** https://huggingface.co/settings/tokens
+
+#### Method 1: .authinfo (Recommended) 🔒
+
+Create `~/.authinfo` or `~/.authinfo.gpg` (encrypted):
+
+```
+machine api-inference.huggingface.co login token password hf_xxxxxxxxxxxxx
+```
+
+Set permissions:
+```bash
+chmod 600 ~/.authinfo
+```
+
+In your Emacs config:
+```elisp
+(setq chatgpt-shell-huggingface-key
+      (lambda ()
+        (auth-source-pick-first-password
+         :host "api-inference.huggingface.co")))
+```
+
+📖 **[Full .authinfo setup guide →](AUTHINFO_SETUP.md)**
+
+#### Method 2: Environment Variable
+
+```bash
+export HUGGINGFACE_API_KEY="hf_xxxxxxxxxxxxx"
+```
 
 ```elisp
-;; Direct string
-(setq chatgpt-shell-huggingface-key "hf_xxxxxxxxxxxxx")
+(setq chatgpt-shell-huggingface-key (getenv "HUGGINGFACE_API_KEY"))
+```
 
-;; Or use a function (recommended for security)
+#### Method 3: Password Store (pass)
+
+```elisp
 (setq chatgpt-shell-huggingface-key
       (lambda ()
         (auth-source-pass-get 'secret "huggingface-key")))
 ```
+
+#### Method 4: Direct String (Not Recommended)
+
+```elisp
+(setq chatgpt-shell-huggingface-key "hf_xxxxxxxxxxxxx")
+```
+
+⚠️ **Don't hardcode tokens in version-controlled files!**
 
 ### Default Filters
 

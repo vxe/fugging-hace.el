@@ -26,9 +26,38 @@ Or add to your `init.el`:
   :ensure t)
 ```
 
-## Step 3: Add to Your Emacs Config
+## Step 3: Store Your Token Securely (Recommended)
+
+**Option A: Using .authinfo (Recommended)** 🔒
+
+Create `~/.authinfo`:
+
+```bash
+echo "machine api-inference.huggingface.co login token password hf_YourActualTokenHere" >> ~/.authinfo
+chmod 600 ~/.authinfo
+```
+
+**Option B: Using .authinfo.gpg (Encrypted)** 🔐
+
+In Emacs:
+```
+C-x C-f ~/.authinfo.gpg RET
+```
+
+Add this line:
+```
+machine api-inference.huggingface.co login token password hf_YourActualTokenHere
+```
+
+Save with `C-x C-s` (Emacs will encrypt automatically)
+
+📖 **For detailed setup, see [AUTHINFO_SETUP.md](AUTHINFO_SETUP.md)**
+
+## Step 4: Add to Your Emacs Config
 
 Add these lines to `~/.emacs` or `~/.emacs.d/init.el`:
+
+**If using .authinfo (recommended):**
 
 ```elisp
 ;; Add to load path
@@ -40,16 +69,38 @@ Add these lines to `~/.emacs` or `~/.emacs.d/init.el`:
 ;; Load chatgpt-shell integration (if installed)
 (when (require 'chatgpt-shell nil t)
   (require 'chatgpt-shell-huggingface)
-  ;; Set your token (replace with your actual token)
+  ;; Read token from .authinfo (secure!)
+  (setq chatgpt-shell-huggingface-key
+        (lambda ()
+          (auth-source-pick-first-password
+           :host "api-inference.huggingface.co"))))
+
+;; Optional: keybinding for quick access
+(global-set-key (kbd "C-c h b") #'huggingface-browser)
+```
+
+**Alternative (less secure - hardcoded token):**
+
+```elisp
+;; Add to load path
+(add-to-list 'load-path "/path/to/fugging-hace.el")
+
+;; Load the browser
+(require 'huggingface-browser)
+
+;; Load chatgpt-shell integration (if installed)
+(when (require 'chatgpt-shell nil t)
+  (require 'chatgpt-shell-huggingface)
+  ;; Set your token directly (replace with your actual token)
   (setq chatgpt-shell-huggingface-key "hf_xxxxxxxxxxxxxxxxxxxxx"))
 
 ;; Optional: keybinding for quick access
 (global-set-key (kbd "C-c h b") #'huggingface-browser)
 ```
 
-**Important**: Replace `"hf_xxxxxxxxxxxxxxxxxxxxx"` with your actual token!
+⚠️ **Note**: Don't hardcode tokens in files you commit to git!
 
-## Step 4: Restart Emacs
+## Step 5: Restart Emacs
 
 Close and reopen Emacs, or evaluate the config:
 
@@ -57,7 +108,7 @@ Close and reopen Emacs, or evaluate the config:
 M-x eval-buffer RET
 ```
 
-## Step 5: Launch the Browser!
+## Step 6: Launch the Browser!
 
 ```
 M-x huggingface-browser RET
@@ -65,7 +116,7 @@ M-x huggingface-browser RET
 
 Or use the keybinding: `C-c h b`
 
-## Step 6: Browse and Chat
+## Step 7: Browse and Chat
 
 1. **Navigate**: Use arrow keys or `n`/`p` to browse models
 2. **View Details**: Press `d` on any model to see full information
@@ -147,22 +198,31 @@ Or use the keybinding: `C-c h b`
 - `C-c h b` - Open browser
 - `C-c h s` - Open chatgpt-shell
 
-## Security Tip
+## Already Using .authinfo? ✓
 
-Don't hardcode your API key! Use one of these secure methods:
+If you followed Step 3 and used `.authinfo` or `.authinfo.gpg`, you're already using the most secure method! Your token is:
 
+- ✓ Not hardcoded in config files
+- ✓ Protected by file permissions (600)
+- ✓ Optionally encrypted with GPG (.authinfo.gpg)
+- ✓ Safe to commit your Emacs config to git
+
+**Your .authinfo file:**
+```
+machine api-inference.huggingface.co login token password hf_YourToken
+```
+
+**Your Emacs config (safe to share/commit):**
 ```elisp
-;; Method 1: Environment variable
-(setq chatgpt-shell-huggingface-key (getenv "HUGGINGFACE_API_KEY"))
-
-;; Method 2: Auth-source (in ~/.authinfo.gpg)
 (setq chatgpt-shell-huggingface-key
       (lambda ()
         (auth-source-pick-first-password
          :host "api-inference.huggingface.co")))
 ```
 
-See [example-config.el](example-config.el) for more secure storage options.
+📖 For more security options, see:
+- [AUTHINFO_SETUP.md](AUTHINFO_SETUP.md) - Complete security guide
+- [example-config.el](example-config.el) - All configuration methods
 
 ---
 
